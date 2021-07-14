@@ -1,9 +1,18 @@
-FROM golang:1.17rc1-alpine
+FROM golang:1.17rc1
 WORKDIR /work
 
+with:
+    RUN go install golang.org/x/tools/go/analysis/passes/fieldalignment/cmd/fieldalignment@latest
+    RUN go install github.com/kyleconroy/sqlc/cmd/sqlc@latest
+    RUN go install golang.org/x/tools/cmd/goimports@latest
+    RUN go install github.com/derision-test/go-mockgen/...@latest
+
 deps:
+    FROM +with
+
     COPY go.mod go.sum .
-    RUN CGO_ENABLED=0 go mod download
+    RUN go mod download
+
     SAVE ARTIFACT go.mod AS LOCAL go.mod
     SAVE ARTIFACT go.sum AS LOCAL go.sum
 
@@ -11,14 +20,15 @@ tidy:
     FROM +deps
     COPY . .
 
-    RUN CGO_ENABLED=0 go mod tidy
+    RUN go mod tidy
 
     SAVE ARTIFACT go.mod AS LOCAL go.mod
     SAVE ARTIFACT go.sum AS LOCAL go.sum
 
 test:
-    FROM +tidy
-    RUN CGO_ENABLED=0 go test ./... -v -cover
+    FROM +deps
+    COPY . .
+    RUN /bin/bash -c "set -a; source .env; go test ./... -v -cover"
 
 lint:
     FROM golangci/golangci-lint:v1.41
@@ -28,8 +38,7 @@ lint:
 
 build:
     FROM +tidy
-
-    RUN CGO_ENABLED=0 go build -ldflags="-w -s" -o ./bot
+    RUN go build -ldflags="-w -s" -o ./bot
     SAVE ARTIFACT ./bot
 
 docker:
@@ -45,7 +54,6 @@ docker:
 
 docker-otc:
     ARG OTC_IMAGE_TAG=latest
-
     FROM ghcr.io/karitham/otc
     RUN apk add --no-cache postgresql-client
 
@@ -53,18 +61,35 @@ docker-otc:
 
 mock-search:
     FROM +deps
-    RUN CGO_ENABLED=0 go install golang.org/x/tools/cmd/goimports@latest
-    RUN CGO_ENABLED=0 go install github.com/derision-test/go-mockgen/...@latest
-
     COPY . .
 
     RUN go-mockgen -f github.com/Karitham/WaifuBot/discord -i SearchProvider -o discord/SearchMock_test.go
     SAVE ARTIFACT discord/SearchMock_test.go AS LOCAL discord/search_mock.go
 
+mock-roll:
+    FROM +deps
+    COPY . .
+
+    RUN go-mockgen -f github.com/Karitham/WaifuBot/discord -i Randomer -o discord/randomer_mock_test.go
+    RUN go-mockgen -f github.com/Karitham/WaifuBot/discord -i Storager -o discord/storager_mock_test.go
+
+    SAVE ARTIFACT discord/randomer_mock_test.go AS LOCAL discord/randomer_mock_test.go
+    SAVE ARTIFACT discord/storager_mock_test.go AS LOCAL discord/storager_mock_test.go
+
 run:
     FROM +tidy
+    RUN go run . || :
 
-    RUN CGO_ENABLED=0 go run . || :
+sqlc:
+    FROM +deps
+    COPY . .
+    RUN sqlc generate
+
+    RUN fieldalignment -fix ./service/store/ || :
+    RUN fieldalignment -fix ./service/store/ || :
+    RUN fieldalignment -fix ./service/store/ || :
+
+    SAVE ARTIFACT ./service/store/* AS LOCAL ./service/store/
 
 docker-all:
     BUILD +docker

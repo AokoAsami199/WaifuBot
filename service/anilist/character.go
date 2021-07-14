@@ -1,4 +1,4 @@
-package search
+package anilist
 
 import (
 	"context"
@@ -7,23 +7,23 @@ import (
 	"github.com/machinebox/graphql"
 )
 
-type name struct {
+type Name struct {
 	Full string `json:"full"`
 }
 
-type image struct {
+type Image struct {
 	Large string `json:"large"`
 }
 
 type Character struct {
-	Name        name   `json:"name"`
+	Name        Name   `json:"name"`
 	Description string `json:"description"`
 	Siteurl     string `json:"siteUrl"`
-	Image       image  `json:"image"`
+	Image       Image  `json:"image"`
 	ID          int    `json:"id"`
 }
 
-// User queries the anilist user
+// User queries the anilist user.
 func (a *Anilist) Character(name string) ([]Character, error) {
 	var q struct {
 		Page struct {
@@ -46,7 +46,6 @@ query ($name: String) {
     }
   }
 }
-
 	`)
 	req.Var("name", name)
 

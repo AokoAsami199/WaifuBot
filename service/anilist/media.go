@@ -1,4 +1,4 @@
-package search
+package anilist
 
 import (
 	"context"
@@ -8,20 +8,20 @@ import (
 	"github.com/machinebox/graphql"
 )
 
-type title struct {
+type Title struct {
 	Romaji string `json:"romaji"`
 }
 
-type cover struct {
+type Cover struct {
 	Large string `json:"large"`
 	Color string `json:"color"`
 }
 
 type Media struct {
-	Title       title  `json:"title"`
+	Title       Title  `json:"title"`
 	Description string `json:"description"`
 	Siteurl     string `json:"siteUrl"`
-	CoverImage  cover  `json:"coverImage"`
+	CoverImage  Cover  `json:"coverImage"`
 	BannerImage string `json:"bannerImage"`
 	ID          int    `json:"id"`
 }

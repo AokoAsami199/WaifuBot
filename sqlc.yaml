@@ -1,7 +1,7 @@
 version: "1"
 packages:
-  - name: "db"
-    path: "./db"
+  - name: "store"
+    path: "./service/store"
     queries: "./sql"
     schema: "./sql"
     engine: "postgresql"

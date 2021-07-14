@@ -6,21 +6,21 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/Karitham/WaifuBot/service/search"
+	"github.com/Karitham/WaifuBot/service/anilist"
 	"github.com/diamondburned/arikawa/v2/api"
 	"github.com/diamondburned/arikawa/v2/discord"
 	"github.com/diamondburned/arikawa/v2/gateway"
-	"github.com/rs/zerolog/log"
 )
 
 type SearchProvider interface {
-	Anime(string) ([]search.Media, error)
-	Manga(string) ([]search.Media, error)
-	Character(string) ([]search.Character, error)
-	User(string) ([]search.User, error)
+	Anime(string) ([]anilist.Media, error)
+	Manga(string) ([]anilist.Media, error)
+	Character(string) ([]anilist.Character, error)
+	User(string) ([]anilist.User, error)
 }
 
 type Interaction struct {
+	Event   *gateway.InteractionCreateEvent
 	Token   string
 	Options []gateway.InteractionOption
 	ID      discord.InteractionID
@@ -40,6 +40,7 @@ func (b *bot) Search(s SearchProvider) Command {
 				Token:   e.Token,
 				Options: opt.Options,
 				ID:      e.ID,
+				Event:   e,
 			})
 		}
 	}
@@ -72,38 +73,17 @@ func (b *bot) regAnimeInteraction(
 	}
 
 	fn := func(i Interaction) {
-		log.Trace().Interface("options", i.Options).Msg("Searching for anime")
-
 		anime, err := s.Anime(i.Options[0].Value)
 		if err != nil {
-			_ = b.s.RespondInteraction(i.ID, i.Token, api.InteractionResponse{
-				Type: api.MessageInteractionWithSource,
-				Data: &api.InteractionResponseData{
-					Content: "Error searching for this anime, either it doesn't exist or something went wrong",
-				},
-			})
-			log.Err(err).Str("title", i.Options[0].Value).Msg("Error searching for the anime")
-		}
-
-		if len(anime) < 1 {
-			_ = b.s.RespondInteraction(i.ID, i.Token, api.InteractionResponse{
-				Type: api.MessageInteractionWithSource,
-				Data: &api.InteractionResponseData{
-					Content: "Error searching for this anime, either it doesn't exist or something went wrong",
-				},
-			})
+			b.RespondWithError(i.Event, "Error searching for this anime, either it doesn't exist or something went wrong", err).
+				Str("title", i.Options[0].Value).
+				Msg("Error searching for the anime")
 			return
 		}
 
-		err = b.s.RespondInteraction(i.ID, i.Token, api.InteractionResponse{
-			Type: api.MessageInteractionWithSource,
-			Data: &api.InteractionResponseData{
-				Embeds: []discord.Embed{buildMediaEmbed(anime[0])},
-			},
-		})
-		if err != nil {
-			log.Err(err).Msg("failed to send interaction callback")
-		}
+		b.RespondWithEmbed(i.Event, buildMediaEmbed(anime[0])).
+			Interface("options", i.Options).
+			Msg("Searching for anime")
 	}
 
 	subcom[opt.Name] = fn
@@ -111,7 +91,7 @@ func (b *bot) regAnimeInteraction(
 }
 
 func (b *bot) regMangaInteraction(
-	subcom map[string]func(e Interaction),
+	sub map[string]func(e Interaction),
 	s SearchProvider,
 ) discord.CommandOption {
 	opt := discord.CommandOption{
@@ -128,46 +108,26 @@ func (b *bot) regMangaInteraction(
 	}
 
 	fn := func(i Interaction) {
-		log.Trace().Interface("options", i.Options).Msg("Searching for a manga")
-
 		manga, err := s.Manga(i.Options[0].Value)
-		if err != nil {
-			_ = b.s.RespondInteraction(i.ID, i.Token, api.InteractionResponse{
-				Type: api.MessageInteractionWithSource,
-				Data: &api.InteractionResponseData{
-					Content: "Error searching for this manga, either it doesn't exist or something went wrong",
-				},
-			})
-			log.Err(err).Str("title", i.Options[0].Value).Msg("Error searching for the manga")
-		}
 
-		if len(manga) < 1 {
-			_ = b.s.RespondInteraction(i.ID, i.Token, api.InteractionResponse{
-				Type: api.MessageInteractionWithSource,
-				Data: &api.InteractionResponseData{
-					Content: "Error searching for this manga, either it doesn't exist or something went wrong",
-				},
-			})
+		if err != nil || len(manga) < 1 {
+			b.RespondWithError(i.Event, "Error searching for this manga, either it doesn't exist or something went wrong", err).
+				Str("title", i.Options[0].Value).
+				Msg("Error searching for the manga")
 			return
 		}
 
-		err = b.s.RespondInteraction(i.ID, i.Token, api.InteractionResponse{
-			Type: api.MessageInteractionWithSource,
-			Data: &api.InteractionResponseData{
-				Embeds: []discord.Embed{buildMediaEmbed(manga[0])},
-			},
-		})
-		if err != nil {
-			log.Err(err).Msg("failed to send interaction callback")
-		}
+		b.RespondWithEmbed(i.Event, buildMediaEmbed(manga[0])).
+			Interface("options", i.Options).
+			Msg("Searching for a manga")
 	}
 
-	subcom[opt.Name] = fn
+	sub[opt.Name] = fn
 	return opt
 }
 
 func (b *bot) regUserInteraction(
-	subcom map[string]func(e Interaction),
+	sub map[string]func(e Interaction),
 	s SearchProvider,
 ) discord.CommandOption {
 	opt := discord.CommandOption{
@@ -184,46 +144,25 @@ func (b *bot) regUserInteraction(
 	}
 
 	fn := func(i Interaction) {
-		log.Trace().Interface("options", i.Options).Msg("Searching for user")
-
 		user, err := s.User(i.Options[0].Value)
-		if err != nil {
-			_ = b.s.RespondInteraction(i.ID, i.Token, api.InteractionResponse{
-				Type: api.MessageInteractionWithSource,
-				Data: &api.InteractionResponseData{
-					Content: "Error searching for this user, either it doesn't exist or something went wrong",
-				},
-			})
-			log.Err(err).Str("name", i.Options[0].Value).Msg("Error searching for the user")
+
+		if err != nil && len(user) < 1 {
+			b.RespondWithError(i.Event, "Error searching for this user, either it doesn't exist or something went wrong", err).
+				Str("name", i.Options[0].Value).
+				Msg("Error searching for the user")
 		}
 
-		if len(user) < 1 {
-			_ = b.s.RespondInteraction(i.ID, i.Token, api.InteractionResponse{
-				Type: api.MessageInteractionWithSource,
-				Data: &api.InteractionResponseData{
-					Content: "Error searching for this user, either it doesn't exist or something went wrong",
-				},
-			})
-			return
-		}
-
-		err = b.s.RespondInteraction(i.ID, i.Token, api.InteractionResponse{
-			Type: api.MessageInteractionWithSource,
-			Data: &api.InteractionResponseData{
-				Embeds: []discord.Embed{buildUserEmbed(user[0])},
-			},
-		})
-		if err != nil {
-			log.Err(err).Msg("failed to send interaction callback")
-		}
+		b.RespondWithEmbed(i.Event, buildUserEmbed(user[0])).
+			Interface("options", i.Options).
+			Msg("Searching for user")
 	}
 
-	subcom[opt.Name] = fn
+	sub[opt.Name] = fn
 	return opt
 }
 
 func (b *bot) regCharInteraction(
-	subcom map[string]func(e Interaction),
+	sub map[string]func(e Interaction),
 	s SearchProvider,
 ) discord.CommandOption {
 	opt := discord.CommandOption{
@@ -240,45 +179,23 @@ func (b *bot) regCharInteraction(
 	}
 
 	fn := func(i Interaction) {
-		log.Trace().Interface("options", i.Options).Msg("Searching for char")
-
 		char, err := s.Character(i.Options[0].Value)
-		if err != nil {
-			_ = b.s.RespondInteraction(i.ID, i.Token, api.InteractionResponse{
-				Type: api.MessageInteractionWithSource,
-				Data: &api.InteractionResponseData{
-					Content: "Error searching for this char, either it doesn't exist or something went wrong",
-				},
-			})
-			log.Err(err).Str("name", i.Options[0].Value).Msg("Error searching for the char")
+
+		if err != nil || len(char) < 1 {
+			b.RespondWithError(i.Event, "Error searching for this char, either it doesn't exist or something went wrong", err).
+				Str("name", i.Options[0].Value).
+				Msg("")
 		}
 
-		if len(char) < 1 {
-			_ = b.s.RespondInteraction(i.ID, i.Token, api.InteractionResponse{
-				Type: api.MessageInteractionWithSource,
-				Data: &api.InteractionResponseData{
-					Content: "Error searching for this char, either it doesn't exist or something went wrong",
-				},
-			})
-			return
-		}
-
-		err = b.s.RespondInteraction(i.ID, i.Token, api.InteractionResponse{
-			Type: api.MessageInteractionWithSource,
-			Data: &api.InteractionResponseData{
-				Embeds: []discord.Embed{buildCharEmbed(char[0])},
-			},
-		})
-		if err != nil {
-			log.Err(err).Msg("failed to send interaction callback")
-		}
+		b.RespondWithEmbed(i.Event, buildCharEmbed(char[0])).Interface("options", i.Options).
+			Msg("Searching for char")
 	}
 
-	subcom[opt.Name] = fn
+	sub[opt.Name] = fn
 	return opt
 }
 
-func buildMediaEmbed(m search.Media) discord.Embed {
+func buildMediaEmbed(m anilist.Media) discord.Embed {
 	return discord.Embed{
 		Title:       FixString(m.Title.Romaji),
 		Description: Sanitize(m.Description),
@@ -288,23 +205,23 @@ func buildMediaEmbed(m search.Media) discord.Embed {
 		Color: discord.Color(ColorToInt(m.CoverImage.Color)),
 		Footer: &discord.EmbedFooter{
 			Text: "View on anilist",
-			Icon: "https://anilist.co/img/icons/favicon-32x32.png",
+			Icon: anilist.IconURL,
 		},
 		Image: &discord.EmbedImage{URL: m.BannerImage},
 	}
 }
 
-func buildUserEmbed(u search.User) discord.Embed {
+func buildUserEmbed(u anilist.User) discord.Embed {
 	return discord.Embed{
 		Title:       u.Name,
 		Description: Sanitize(u.About),
 		URL:         u.Siteurl,
 		Thumbnail:   &discord.EmbedThumbnail{URL: u.Avatar.Large},
 		// Anilist blue
-		Color: 0x19212d,
+		Color: anilist.Color,
 		Footer: &discord.EmbedFooter{
 			Text: "View on anilist",
-			Icon: "https://anilist.co/img/icons/favicon-32x32.png",
+			Icon: anilist.IconURL,
 		},
 		Image: &discord.EmbedImage{
 			URL: fmt.Sprintf("https://img.anili.st/user/%d", u.ID),
@@ -312,40 +229,40 @@ func buildUserEmbed(u search.User) discord.Embed {
 	}
 }
 
-func buildCharEmbed(c search.Character) discord.Embed {
+func buildCharEmbed(c anilist.Character) discord.Embed {
 	return discord.Embed{
 		Title:       FixString(c.Name.Full),
 		Description: Sanitize(c.Description),
 		URL:         c.Siteurl,
 		Thumbnail:   &discord.EmbedThumbnail{URL: c.Image.Large},
 		// Anilist blue
-		Color: 0x19212d,
+		Color: anilist.Color,
 		Footer: &discord.EmbedFooter{
 			Text: "View on anilist",
-			Icon: "https://anilist.co/img/icons/favicon-32x32.png",
+			Icon: anilist.IconURL,
 		},
 	}
 }
 
 // SanitizeHTML removes all HTML tags from the given string.
-// It also removes double newlines and double || characters
+// It also removes double newlines and double || characters.
 var SanitizeHTML = regexp.MustCompile(`<[^>]*>|\|\|[^|]*\|\||\s{2,}|img[\d\%]*\([^)]*\)|[#~*]{2,}|\n`)
 
 // Sanitize removes all HTML tags from the given string.
-// It also removes double newlines and double || characters
+// It also removes double newlines and double || characters.
 func Sanitize(s string) string {
 	return SanitizeHTML.ReplaceAllString(s, " ")
 }
 
 // FixString removes eventual
 // double space or any whitespace possibly in a string
-// and replace it with a space
+// and replace it with a space.
 func FixString(s string) string {
 	return strings.Join(strings.Fields(s), " ")
 }
 
 // ColorToInt
-// Turn an hex color string beginning with a # into a uint32 representing a color
+// Turn an hex color string beginning with a # into a uint32 representing a color.
 func ColorToInt(s string) uint32 {
 	s = strings.Trim(s, "#")
 
