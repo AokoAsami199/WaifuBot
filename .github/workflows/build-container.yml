@@ -2,8 +2,6 @@ name: Build Image
 
 on:
   push:
-    paths:
-      - "**.go"
 
 jobs:
   build-containers:
@@ -36,4 +34,6 @@ jobs:
         run: earthly --version
 
       - name: Run build
-        run: earthly --push +docker-all
+        run: |
+          earthly --push +docker --BOT_IMAGE_TAG=${GITHUB_REF##*/}
+          earthly --push +docker-otc --OTC_IMAGE_TAG=otc_${GITHUB_REF##*/}

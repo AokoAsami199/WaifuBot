@@ -1,29 +1,19 @@
 FROM golang:1.17rc1
 WORKDIR /work
 
-with:
+ext:
     RUN go install golang.org/x/tools/go/analysis/passes/fieldalignment/cmd/fieldalignment@latest
     RUN go install github.com/kyleconroy/sqlc/cmd/sqlc@latest
     RUN go install golang.org/x/tools/cmd/goimports@latest
     RUN go install github.com/derision-test/go-mockgen/...@latest
 
 deps:
-    FROM +with
-
     COPY go.mod go.sum .
     RUN go mod download
 
     SAVE ARTIFACT go.mod AS LOCAL go.mod
     SAVE ARTIFACT go.sum AS LOCAL go.sum
 
-tidy:
-    FROM +deps
-    COPY . .
-
-    RUN go mod tidy
-
-    SAVE ARTIFACT go.mod AS LOCAL go.mod
-    SAVE ARTIFACT go.sum AS LOCAL go.sum
 
 test:
     FROM +deps
@@ -37,7 +27,8 @@ lint:
     RUN golangci-lint run -v
 
 build:
-    FROM +tidy
+    FROM +deps
+    COPY . .
     RUN go build -ldflags="-w -s" -o ./bot
     SAVE ARTIFACT ./bot
 
@@ -53,21 +44,21 @@ docker:
     SAVE IMAGE --push ghcr.io/karitham/waifubot:$BOT_IMAGE_TAG
 
 docker-otc:
-    ARG OTC_IMAGE_TAG=latest
+    ARG OTC_IMAGE_TAG=otc_latest
     FROM ghcr.io/karitham/otc
     RUN apk add --no-cache postgresql-client
 
     SAVE IMAGE --push ghcr.io/karitham/waifubot:$OTC_IMAGE_TAG
 
 mock-search:
-    FROM +deps
+    FROM +ext
     COPY . .
 
     RUN go-mockgen -f github.com/Karitham/WaifuBot/discord -i SearchProvider -o discord/SearchMock_test.go
     SAVE ARTIFACT discord/SearchMock_test.go AS LOCAL discord/search_mock.go
 
 mock-roll:
-    FROM +deps
+    FROM +ext
     COPY . .
 
     RUN go-mockgen -f github.com/Karitham/WaifuBot/discord -i Randomer -o discord/randomer_mock_test.go
@@ -77,11 +68,12 @@ mock-roll:
     SAVE ARTIFACT discord/storager_mock_test.go AS LOCAL discord/storager_mock_test.go
 
 run:
-    FROM +tidy
+    FROM +deps
+    COPY . .
     RUN go run . || :
 
 sqlc:
-    FROM +deps
+    FROM +ext
     COPY . .
     RUN sqlc generate
 
