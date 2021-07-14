@@ -10,6 +10,10 @@ on:
 jobs:
   build-containers:
     runs-on: ubuntu-latest
+    env:
+      FORCE_COLOR: 1
+      BOT_IMAGE_TAG: ${GITHUB_REF##*/}
+      OTC_IMAGE_TAG: otc_${GITHUB_REF##*/}
     steps:
       - name: Checkout
         uses: actions/checkout@v2
@@ -27,13 +31,11 @@ jobs:
           username: karitham
           password: ${{ secrets.GR_PAT }}
 
-      - name: Build and push
-        uses: docker/build-push-action@v2
-        with:
-          context: .
-          platforms: linux/amd64,linux/arm64
-          push: true
-          builder: ${{ steps.buildx.outputs.name }}
-          tags: ghcr.io/karitham/waifubot:postgres
-          cache-from: type=registry,ref=karitham/waifuBot:postgres
-          cache-to: type=inline
+      - name: setup
+        run: "sudo /bin/sh -c 'wget https://github.com/earthly/earthly/releases/download/v0.5.18/earthly-linux-amd64 -O /usr/local/bin/earthly && chmod +x /usr/local/bin/earthly'"
+
+      - name: Earthly version
+        run: earthly --version
+
+      - name: Run build
+        run: earthly --push +docker-all

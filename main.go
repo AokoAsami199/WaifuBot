@@ -1,37 +1,24 @@
 package main
 
 import (
-	"github.com/rs/zerolog/log"
+	"os"
 
-	"github.com/Karitham/WaifuBot/config"
-	"github.com/Karitham/WaifuBot/db"
-	"github.com/Karitham/WaifuBot/disc"
+	"github.com/Karitham/WaifuBot/discord"
+	"github.com/joho/godotenv"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 )
 
 func main() {
-	// Retrieve config
-	conf, err := config.Retrieve()
-	if err != nil {
-		log.Fatal().Err(err).Msg("Error getting config")
-	}
+	log.Logger = log.Output(zerolog.NewConsoleWriter())
 
-	// Setup db
-	conn, err := db.Init(conf.Database)
-	if err != nil {
-		log.Fatal().Err(err).Msg("Couldn't connect to db")
-	}
+	//nolint:errcheck
+	godotenv.Load()
+	appID := os.Getenv("APP_ID")
+	token := os.Getenv("BOT_TOKEN")
 
-	// Run the bot
-	waitFn, err := disc.Start(conf, conn)
-	if err != nil {
-		log.Fatal().Err(err).Msg("Error starting the bot")
-	}
+	rm := discord.LS(appID, token)
+	defer rm()
 
-	log.Info().Msg("Bot started")
-
-	if err := waitFn(); err != nil {
-		log.Fatal().
-			Err(err).
-			Msg("Error on keeping the bot alive")
-	}
+	select {}
 }

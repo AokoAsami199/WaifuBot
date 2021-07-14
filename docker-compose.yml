@@ -1,6 +1,6 @@
 services:
   bot:
-    image: ghcr.io/karitham/waifubot:postgres
+    image: ghcr.io/karitham/waifubot:slash
     restart: unless-stopped
     container_name: waifu_bot
     networks:
@@ -73,9 +73,7 @@ services:
       - 3333:3333
 
   backup:
-    build:
-      context: ./
-      dockerfile: $PWD/dockerfile-otc
+    image: ghcr.io/karitham/waifubot:otc_slash
     container_name: waifu_otc
     networks:
       - default
