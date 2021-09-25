@@ -1,19 +1,29 @@
 package discord
 
 import (
+	"context"
 	"os"
 	"strconv"
 	"testing"
 
 	"github.com/Karitham/WaifuBot/service/anilist"
 	"github.com/Karitham/WaifuBot/service/store"
-	"github.com/diamondburned/arikawa/v2/discord"
-	"github.com/diamondburned/arikawa/v2/session"
+	"github.com/diamondburned/arikawa/v3/api"
+	"github.com/diamondburned/arikawa/v3/discord"
+	"github.com/diamondburned/arikawa/v3/session"
 	"github.com/joho/godotenv"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 )
 
 func Test_bot_Roller(t *testing.T) {
-	_ = godotenv.Load()
+	d, _ := t.Deadline()
+	ctx, cancel := context.WithDeadline(context.Background(), d)
+	defer cancel()
+
+	_ = godotenv.Load("../.env")
+	log.Level(zerolog.TraceLevel)
+
 	token := os.Getenv("BOT_TOKEN")
 	if token == "" {
 		t.Skip("BOT_TOKEN not set")
@@ -42,7 +52,7 @@ func Test_bot_Roller(t *testing.T) {
 		Image:   anilist.Image{Large: "https://s4.anilist.co/file/anilistcdn/character/large/b149676-TxktIkOe5Xl1.jpg"},
 		ID:      149676,
 	}, nil)
-	storer := NewMockStorager()
+	storer := NewMockStorer()
 	storer.GetFunc.SetDefaultReturn([]store.Character{}, nil)
 	storer.PutFunc.SetDefaultHook(func(i int, c store.Character) error {
 		t.Log(c)
@@ -56,14 +66,20 @@ func Test_bot_Roller(t *testing.T) {
 		return
 	}
 
-	b.RegisterGuild(discord.GuildID(MustAtoi(guildID)), b.Roller(randomer, storer))
+	b.RegisterGuild(discord.GuildID(MustAtoi(guildID)), map[string]Commander{
+		"roll": Command{fn: b.Roller(randomer, storer), cmd: api.CreateCommandData{
+			Name:        "roll",
+			Description: "test a roll",
+		}},
+	})
 
-	if err := b.Open(); err != nil {
+	if err := b.Open(ctx); err != nil {
 		t.Fatal(err)
 		return
 	}
 	defer b.s.Close()
-	select {}
+
+	<-ctx.Done()
 }
 
 func Setup(t *testing.T, appID, token string, commands ...Command) *bot {

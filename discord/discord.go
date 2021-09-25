@@ -1,17 +1,20 @@
 package discord
 
 import (
+	"context"
+
 	"github.com/Karitham/WaifuBot/service/anilist"
-	"github.com/diamondburned/arikawa/v2/api"
-	"github.com/diamondburned/arikawa/v2/discord"
-	"github.com/diamondburned/arikawa/v2/gateway"
-	"github.com/diamondburned/arikawa/v2/session"
-	"github.com/rs/zerolog"
+	"github.com/davecgh/go-spew/spew"
+	"github.com/diamondburned/arikawa/v3/api"
+	"github.com/diamondburned/arikawa/v3/discord"
+	"github.com/diamondburned/arikawa/v3/gateway"
+	"github.com/diamondburned/arikawa/v3/session"
+	"github.com/diamondburned/arikawa/v3/utils/json/option"
 	"github.com/rs/zerolog/log"
 )
 
 type bot struct {
-	commands  map[discord.CommandID]func(e *gateway.InteractionCreateEvent)
+	commands  map[string]Commander
 	s         *session.Session
 	eventChan chan *gateway.InteractionCreateEvent
 	appID     discord.AppID
@@ -33,12 +36,11 @@ func LS(appID, token string) (close func()) {
 		return
 	}
 
-	if err = b.Open(); err != nil {
+	if err = b.Open(context.TODO()); err != nil {
 		log.Fatal().Err(err).Msg("failed to open")
 	}
 
-	b.Register(b.Search(anilist.New()))
-	b.Register()
+	b.Register(b.Commands())
 
 	log.Info().Msg("Gateway connected")
 
@@ -60,66 +62,208 @@ func New(sess *session.Session, appID discord.AppID) *bot {
 	b := &bot{
 		s:         sess,
 		eventChan: make(chan *gateway.InteractionCreateEvent),
-		commands:  make(map[discord.CommandID]func(e *gateway.InteractionCreateEvent)),
+		commands:  make(map[string]Commander),
 		appID:     appID,
 	}
 
 	sess.AddHandler(b.eventChan)
 
-	sess.Gateway.AddIntents(gateway.IntentGuilds)
-	sess.Gateway.AddIntents(gateway.IntentGuildMessages)
+	sess.AddIntents(gateway.IntentGuilds)
+	sess.AddIntents(gateway.IntentGuildMessages)
 
 	return b
 }
 
-func (b *bot) Open() error {
-	err := b.s.Open()
+func (b *bot) Open(ctx context.Context) error {
+	err := b.s.Open(ctx)
 	go b.route()
-
 	return err
 }
 
-func (b *bot) RespondWithEmbed(e *gateway.InteractionCreateEvent, embed discord.Embed) *zerolog.Event {
-	err := b.s.RespondInteraction(e.ID, e.Token, api.InteractionResponse{
-		Type: api.MessageInteractionWithSource,
-		Data: &api.InteractionResponseData{
-			Embeds: []discord.Embed{embed},
+func (b *bot) Commands() map[string]Commander {
+	anilist := anilist.New()
+
+	return map[string]Commander{
+		// TODO: Implement roll with a store
+		"roll": Command{
+			fn: Unimplemented,
+			cmd: api.CreateCommandData{
+				Name:        "roll",
+				Description: "roll a character, obtain it for yourself",
+			},
 		},
-	})
-	if err != nil {
-		return log.Err(err)
+		// TODO: Implement verify
+		"verify": Command{
+			fn: Unimplemented,
+			cmd: api.CreateCommandData{
+				Name:        "verify",
+				Description: "check if a user has a character",
+				Options: []discord.CommandOption{
+					{
+						Name:        "charID",
+						Description: "ID of the character you to check for",
+						Type:        discord.IntegerOption,
+						Required:    true,
+					},
+					{
+						Name:        "user",
+						Description: "user you want to check the character agaisnt",
+						Type:        discord.UserOption,
+						Required:    true,
+					},
+				},
+			},
+		},
+		// TODO: Implement give, and the store
+		"give": Command{
+			fn: Unimplemented,
+			cmd: api.CreateCommandData{
+				Name:        "give",
+				Description: "give a character to a user",
+				Options: []discord.CommandOption{
+					{
+						Name:        "charID",
+						Description: "ID of the character you want to gift",
+						Type:        discord.IntegerOption,
+						Required:    true,
+					},
+					{
+						Name:        "user",
+						Description: "user you want to gift the character to",
+						Type:        discord.UserOption,
+						Required:    true,
+					},
+				},
+			},
+		},
+		// TODO: Implement profile and the store
+		"profile": SubCommand{
+			"edit": SubCommand{
+				"favorite": Command{
+					fn: Unimplemented,
+					cmd: api.CreateCommandData{
+						Name:        "favorite",
+						Description: "set your favorite character",
+						Options: []discord.CommandOption{{
+							Name:        "characterID",
+							Description: "the id of the character you want to set as your favorite",
+							Type:        discord.IntegerOption,
+							Required:    true,
+						}},
+					},
+				},
+				"quote": Command{
+					fn: Unimplemented,
+					cmd: api.CreateCommandData{
+						Name:        "quote",
+						Description: "set your profile quote character",
+						Options: []discord.CommandOption{{
+							Name:        "quote",
+							Description: "the id of the character you want to set as your favorite",
+							Type:        discord.StringOption,
+							Required:    true,
+						}},
+					},
+				},
+			},
+			"view": Command{
+				fn: Unimplemented,
+				cmd: api.CreateCommandData{
+					Name:        "view",
+					Description: "view the user's profile",
+					Options: []discord.CommandOption{
+						{
+							Name:        "user",
+							Type:        discord.UserOption,
+							Description: "user to view the profile of",
+							Required:    false,
+						},
+					},
+				},
+			},
+		},
+		// TODO: implement list
+		"list": Command{
+			fn: Unimplemented,
+			cmd: api.CreateCommandData{
+				Name:        "list",
+				Description: "list all characters",
+				Options: []discord.CommandOption{
+					{
+						Name:        "user",
+						Description: "user to list the characters of",
+						Type:        discord.UserOption,
+						Required:    false,
+					},
+				},
+			},
+		},
+		"search": SubCommand{
+			"anime": Command{
+				cmd: api.CreateCommandData{
+					Name:        "anime",
+					Description: "search for an anime",
+					Options: []discord.CommandOption{{
+						Type:        discord.StringOption,
+						Name:        "title",
+						Description: "title of the anime",
+						Required:    true,
+					}},
+				},
+				fn: b.SearchAnime(anilist),
+			},
+			"manga": Command{
+				cmd: api.CreateCommandData{
+					Name:        "manga",
+					Description: "search for a manga",
+					Options: []discord.CommandOption{{
+						Type:        discord.StringOption,
+						Name:        "title",
+						Description: "title of the manga",
+						Required:    true,
+					}},
+				},
+				fn: b.SearchManga(anilist),
+			},
+			"char": Command{
+				cmd: api.CreateCommandData{
+					Name:        "char",
+					Description: "search for a character",
+					Options: []discord.CommandOption{{
+						Type:        discord.StringOption,
+						Name:        "name",
+						Description: "name of the character",
+						Required:    true,
+					}},
+				},
+				fn: b.SearchChar(anilist),
+			},
+			"user": Command{
+				cmd: api.CreateCommandData{
+					Name:        "user",
+					Description: "search for a user",
+					Options: []discord.CommandOption{{
+						Type:        discord.StringOption,
+						Name:        "name",
+						Description: "name of the user",
+						Required:    true,
+					}},
+				},
+				fn: b.SearchUser(anilist),
+			},
+		},
 	}
-	return log.Trace()
 }
 
-func (b *bot) RespondWithMessage(e *gateway.InteractionCreateEvent, s string) *zerolog.Event {
-	err := b.s.RespondInteraction(e.ID, e.Token, api.InteractionResponse{
-		Type: api.MessageInteractionWithSource,
-		Data: &api.InteractionResponseData{
-			Content: "Error searching for this char, either it doesn't exist or something went wrong",
-		},
-	})
-	if err != nil {
-		return log.Err(err)
+func Unimplemented(e *gateway.InteractionCreateEvent, d discord.CommandInteractionData) api.InteractionResponseData {
+	return api.InteractionResponseData{
+		Flags:   api.EphemeralResponse,
+		Content: option.NewNullableString("This command is not yet implemented"),
+		Embeds: &[]discord.Embed{{
+			Title:       "Command",
+			Description: "```dump\n" + spew.Sdump(d) + "\n```",
+			Timestamp:   discord.NowTimestamp(),
+			Color:       discord.Color(0xFF0000),
+		}},
 	}
-
-	return log.Trace()
-}
-
-func (b *bot) RespondWithError(e *gateway.InteractionCreateEvent, s string, err error) *zerolog.Event {
-	err2 := b.s.RespondInteraction(e.ID, e.Token, api.InteractionResponse{
-		Type: api.MessageInteractionWithSource,
-		Data: &api.InteractionResponseData{
-			Content: "Error searching for this char, either it doesn't exist or something went wrong",
-		},
-	})
-	if err2 != nil {
-		return log.Warn().AnErr("default_err", err).AnErr("response_err", err2)
-	}
-
-	if err == nil {
-		return log.Trace()
-	}
-
-	return log.Debug().Err(err)
 }

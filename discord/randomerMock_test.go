@@ -8,7 +8,7 @@ import (
 	anilist "github.com/Karitham/WaifuBot/service/anilist"
 )
 
-// MockRandomer is a mock implementation of the Randomer interface (from the
+// MockRandomer is a mock implementation of the randomer interface (from the
 // package github.com/Karitham/WaifuBot/discord) used for unit testing.
 type MockRandomer struct {
 	// RandomFunc is an instance of a mock function object controlling the
@@ -16,7 +16,7 @@ type MockRandomer struct {
 	RandomFunc *RandomerRandomFunc
 }
 
-// NewMockRandomer creates a new mock of the Randomer interface. All methods
+// NewMockRandomer creates a new mock of the randomer interface. All methods
 // return zero values for all results, unless overwritten.
 func NewMockRandomer() *MockRandomer {
 	return &MockRandomer{
@@ -28,9 +28,16 @@ func NewMockRandomer() *MockRandomer {
 	}
 }
 
+// surrogateMockRandomer is a copy of the randomer interface (from the
+// package github.com/Karitham/WaifuBot/discord). It is redefined here as it
+// is unexported in the source package.
+type surrogateMockRandomer interface {
+	Random([]int) (anilist.Character, error)
+}
+
 // NewMockRandomerFrom creates a new mock of the MockRandomer interface. All
 // methods delegate to the given implementation, unless overwritten.
-func NewMockRandomerFrom(i Randomer) *MockRandomer {
+func NewMockRandomerFrom(i surrogateMockRandomer) *MockRandomer {
 	return &MockRandomer{
 		RandomFunc: &RandomerRandomFunc{
 			defaultHook: i.Random,

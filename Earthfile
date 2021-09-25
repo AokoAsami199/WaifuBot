@@ -1,4 +1,4 @@
-FROM golang:1.17rc1
+FROM golang:1.17.1
 WORKDIR /work
 
 ext:
@@ -50,27 +50,16 @@ docker-otc:
 
     SAVE IMAGE --push ghcr.io/karitham/waifubot:$OTC_IMAGE_TAG
 
-mock-search:
-    FROM +ext
-    COPY . .
-
-    RUN go-mockgen -f github.com/Karitham/WaifuBot/discord -i SearchProvider -o discord/SearchMock_test.go
-    SAVE ARTIFACT discord/SearchMock_test.go AS LOCAL discord/search_mock.go
-
-mock-roll:
-    FROM +ext
-    COPY . .
-
-    RUN go-mockgen -f github.com/Karitham/WaifuBot/discord -i Randomer -o discord/randomer_mock_test.go
-    RUN go-mockgen -f github.com/Karitham/WaifuBot/discord -i Storager -o discord/storager_mock_test.go
-
-    SAVE ARTIFACT discord/randomer_mock_test.go AS LOCAL discord/randomer_mock_test.go
-    SAVE ARTIFACT discord/storager_mock_test.go AS LOCAL discord/storager_mock_test.go
-
 run:
     FROM +deps
     COPY . .
     RUN go run . || :
+
+mock:
+    FROM +ext
+    COPY . .
+    RUN go generate ./...
+    SAVE ARTIFACT . AS LOCAL .
 
 sqlc:
     FROM +ext

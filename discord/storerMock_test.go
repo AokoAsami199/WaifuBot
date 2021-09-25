@@ -8,27 +8,27 @@ import (
 	store "github.com/Karitham/WaifuBot/service/store"
 )
 
-// MockStorager is a mock implementation of the Storager interface (from the
+// MockStorer is a mock implementation of the storer interface (from the
 // package github.com/Karitham/WaifuBot/discord) used for unit testing.
-type MockStorager struct {
+type MockStorer struct {
 	// GetFunc is an instance of a mock function object controlling the
 	// behavior of the method Get.
-	GetFunc *StoragerGetFunc
+	GetFunc *StorerGetFunc
 	// PutFunc is an instance of a mock function object controlling the
 	// behavior of the method Put.
-	PutFunc *StoragerPutFunc
+	PutFunc *StorerPutFunc
 }
 
-// NewMockStorager creates a new mock of the Storager interface. All methods
+// NewMockStorer creates a new mock of the storer interface. All methods
 // return zero values for all results, unless overwritten.
-func NewMockStorager() *MockStorager {
-	return &MockStorager{
-		GetFunc: &StoragerGetFunc{
+func NewMockStorer() *MockStorer {
+	return &MockStorer{
+		GetFunc: &StorerGetFunc{
 			defaultHook: func(int) ([]store.Character, error) {
 				return nil, nil
 			},
 		},
-		PutFunc: &StoragerPutFunc{
+		PutFunc: &StorerPutFunc{
 			defaultHook: func(int, store.Character) error {
 				return nil
 			},
@@ -36,47 +36,55 @@ func NewMockStorager() *MockStorager {
 	}
 }
 
-// NewMockStoragerFrom creates a new mock of the MockStorager interface. All
+// surrogateMockStorer is a copy of the storer interface (from the package
+// github.com/Karitham/WaifuBot/discord). It is redefined here as it is
+// unexported in the source package.
+type surrogateMockStorer interface {
+	Get(int) ([]store.Character, error)
+	Put(int, store.Character) error
+}
+
+// NewMockStorerFrom creates a new mock of the MockStorer interface. All
 // methods delegate to the given implementation, unless overwritten.
-func NewMockStoragerFrom(i Storager) *MockStorager {
-	return &MockStorager{
-		GetFunc: &StoragerGetFunc{
+func NewMockStorerFrom(i surrogateMockStorer) *MockStorer {
+	return &MockStorer{
+		GetFunc: &StorerGetFunc{
 			defaultHook: i.Get,
 		},
-		PutFunc: &StoragerPutFunc{
+		PutFunc: &StorerPutFunc{
 			defaultHook: i.Put,
 		},
 	}
 }
 
-// StoragerGetFunc describes the behavior when the Get method of the parent
-// MockStorager instance is invoked.
-type StoragerGetFunc struct {
+// StorerGetFunc describes the behavior when the Get method of the parent
+// MockStorer instance is invoked.
+type StorerGetFunc struct {
 	defaultHook func(int) ([]store.Character, error)
 	hooks       []func(int) ([]store.Character, error)
-	history     []StoragerGetFuncCall
+	history     []StorerGetFuncCall
 	mutex       sync.Mutex
 }
 
 // Get delegates to the next hook function in the queue and stores the
 // parameter and result values of this invocation.
-func (m *MockStorager) Get(v0 int) ([]store.Character, error) {
+func (m *MockStorer) Get(v0 int) ([]store.Character, error) {
 	r0, r1 := m.GetFunc.nextHook()(v0)
-	m.GetFunc.appendCall(StoragerGetFuncCall{v0, r0, r1})
+	m.GetFunc.appendCall(StorerGetFuncCall{v0, r0, r1})
 	return r0, r1
 }
 
 // SetDefaultHook sets function that is called when the Get method of the
-// parent MockStorager instance is invoked and the hook queue is empty.
-func (f *StoragerGetFunc) SetDefaultHook(hook func(int) ([]store.Character, error)) {
+// parent MockStorer instance is invoked and the hook queue is empty.
+func (f *StorerGetFunc) SetDefaultHook(hook func(int) ([]store.Character, error)) {
 	f.defaultHook = hook
 }
 
 // PushHook adds a function to the end of hook queue. Each invocation of the
-// Get method of the parent MockStorager instance invokes the hook at the
+// Get method of the parent MockStorer instance invokes the hook at the
 // front of the queue and discards it. After the queue is empty, the default
 // hook function is invoked for any future action.
-func (f *StoragerGetFunc) PushHook(hook func(int) ([]store.Character, error)) {
+func (f *StorerGetFunc) PushHook(hook func(int) ([]store.Character, error)) {
 	f.mutex.Lock()
 	f.hooks = append(f.hooks, hook)
 	f.mutex.Unlock()
@@ -84,7 +92,7 @@ func (f *StoragerGetFunc) PushHook(hook func(int) ([]store.Character, error)) {
 
 // SetDefaultReturn calls SetDefaultDefaultHook with a function that returns
 // the given values.
-func (f *StoragerGetFunc) SetDefaultReturn(r0 []store.Character, r1 error) {
+func (f *StorerGetFunc) SetDefaultReturn(r0 []store.Character, r1 error) {
 	f.SetDefaultHook(func(int) ([]store.Character, error) {
 		return r0, r1
 	})
@@ -92,13 +100,13 @@ func (f *StoragerGetFunc) SetDefaultReturn(r0 []store.Character, r1 error) {
 
 // PushReturn calls PushDefaultHook with a function that returns the given
 // values.
-func (f *StoragerGetFunc) PushReturn(r0 []store.Character, r1 error) {
+func (f *StorerGetFunc) PushReturn(r0 []store.Character, r1 error) {
 	f.PushHook(func(int) ([]store.Character, error) {
 		return r0, r1
 	})
 }
 
-func (f *StoragerGetFunc) nextHook() func(int) ([]store.Character, error) {
+func (f *StorerGetFunc) nextHook() func(int) ([]store.Character, error) {
 	f.mutex.Lock()
 	defer f.mutex.Unlock()
 
@@ -111,26 +119,26 @@ func (f *StoragerGetFunc) nextHook() func(int) ([]store.Character, error) {
 	return hook
 }
 
-func (f *StoragerGetFunc) appendCall(r0 StoragerGetFuncCall) {
+func (f *StorerGetFunc) appendCall(r0 StorerGetFuncCall) {
 	f.mutex.Lock()
 	f.history = append(f.history, r0)
 	f.mutex.Unlock()
 }
 
-// History returns a sequence of StoragerGetFuncCall objects describing the
+// History returns a sequence of StorerGetFuncCall objects describing the
 // invocations of this function.
-func (f *StoragerGetFunc) History() []StoragerGetFuncCall {
+func (f *StorerGetFunc) History() []StorerGetFuncCall {
 	f.mutex.Lock()
-	history := make([]StoragerGetFuncCall, len(f.history))
+	history := make([]StorerGetFuncCall, len(f.history))
 	copy(history, f.history)
 	f.mutex.Unlock()
 
 	return history
 }
 
-// StoragerGetFuncCall is an object that describes an invocation of method
-// Get on an instance of MockStorager.
-type StoragerGetFuncCall struct {
+// StorerGetFuncCall is an object that describes an invocation of method Get
+// on an instance of MockStorer.
+type StorerGetFuncCall struct {
 	// Arg0 is the value of the 1st argument passed to this method
 	// invocation.
 	Arg0 int
@@ -144,44 +152,44 @@ type StoragerGetFuncCall struct {
 
 // Args returns an interface slice containing the arguments of this
 // invocation.
-func (c StoragerGetFuncCall) Args() []interface{} {
+func (c StorerGetFuncCall) Args() []interface{} {
 	return []interface{}{c.Arg0}
 }
 
 // Results returns an interface slice containing the results of this
 // invocation.
-func (c StoragerGetFuncCall) Results() []interface{} {
+func (c StorerGetFuncCall) Results() []interface{} {
 	return []interface{}{c.Result0, c.Result1}
 }
 
-// StoragerPutFunc describes the behavior when the Put method of the parent
-// MockStorager instance is invoked.
-type StoragerPutFunc struct {
+// StorerPutFunc describes the behavior when the Put method of the parent
+// MockStorer instance is invoked.
+type StorerPutFunc struct {
 	defaultHook func(int, store.Character) error
 	hooks       []func(int, store.Character) error
-	history     []StoragerPutFuncCall
+	history     []StorerPutFuncCall
 	mutex       sync.Mutex
 }
 
 // Put delegates to the next hook function in the queue and stores the
 // parameter and result values of this invocation.
-func (m *MockStorager) Put(v0 int, v1 store.Character) error {
+func (m *MockStorer) Put(v0 int, v1 store.Character) error {
 	r0 := m.PutFunc.nextHook()(v0, v1)
-	m.PutFunc.appendCall(StoragerPutFuncCall{v0, v1, r0})
+	m.PutFunc.appendCall(StorerPutFuncCall{v0, v1, r0})
 	return r0
 }
 
 // SetDefaultHook sets function that is called when the Put method of the
-// parent MockStorager instance is invoked and the hook queue is empty.
-func (f *StoragerPutFunc) SetDefaultHook(hook func(int, store.Character) error) {
+// parent MockStorer instance is invoked and the hook queue is empty.
+func (f *StorerPutFunc) SetDefaultHook(hook func(int, store.Character) error) {
 	f.defaultHook = hook
 }
 
 // PushHook adds a function to the end of hook queue. Each invocation of the
-// Put method of the parent MockStorager instance invokes the hook at the
+// Put method of the parent MockStorer instance invokes the hook at the
 // front of the queue and discards it. After the queue is empty, the default
 // hook function is invoked for any future action.
-func (f *StoragerPutFunc) PushHook(hook func(int, store.Character) error) {
+func (f *StorerPutFunc) PushHook(hook func(int, store.Character) error) {
 	f.mutex.Lock()
 	f.hooks = append(f.hooks, hook)
 	f.mutex.Unlock()
@@ -189,7 +197,7 @@ func (f *StoragerPutFunc) PushHook(hook func(int, store.Character) error) {
 
 // SetDefaultReturn calls SetDefaultDefaultHook with a function that returns
 // the given values.
-func (f *StoragerPutFunc) SetDefaultReturn(r0 error) {
+func (f *StorerPutFunc) SetDefaultReturn(r0 error) {
 	f.SetDefaultHook(func(int, store.Character) error {
 		return r0
 	})
@@ -197,13 +205,13 @@ func (f *StoragerPutFunc) SetDefaultReturn(r0 error) {
 
 // PushReturn calls PushDefaultHook with a function that returns the given
 // values.
-func (f *StoragerPutFunc) PushReturn(r0 error) {
+func (f *StorerPutFunc) PushReturn(r0 error) {
 	f.PushHook(func(int, store.Character) error {
 		return r0
 	})
 }
 
-func (f *StoragerPutFunc) nextHook() func(int, store.Character) error {
+func (f *StorerPutFunc) nextHook() func(int, store.Character) error {
 	f.mutex.Lock()
 	defer f.mutex.Unlock()
 
@@ -216,26 +224,26 @@ func (f *StoragerPutFunc) nextHook() func(int, store.Character) error {
 	return hook
 }
 
-func (f *StoragerPutFunc) appendCall(r0 StoragerPutFuncCall) {
+func (f *StorerPutFunc) appendCall(r0 StorerPutFuncCall) {
 	f.mutex.Lock()
 	f.history = append(f.history, r0)
 	f.mutex.Unlock()
 }
 
-// History returns a sequence of StoragerPutFuncCall objects describing the
+// History returns a sequence of StorerPutFuncCall objects describing the
 // invocations of this function.
-func (f *StoragerPutFunc) History() []StoragerPutFuncCall {
+func (f *StorerPutFunc) History() []StorerPutFuncCall {
 	f.mutex.Lock()
-	history := make([]StoragerPutFuncCall, len(f.history))
+	history := make([]StorerPutFuncCall, len(f.history))
 	copy(history, f.history)
 	f.mutex.Unlock()
 
 	return history
 }
 
-// StoragerPutFuncCall is an object that describes an invocation of method
-// Put on an instance of MockStorager.
-type StoragerPutFuncCall struct {
+// StorerPutFuncCall is an object that describes an invocation of method Put
+// on an instance of MockStorer.
+type StorerPutFuncCall struct {
 	// Arg0 is the value of the 1st argument passed to this method
 	// invocation.
 	Arg0 int
@@ -249,12 +257,12 @@ type StoragerPutFuncCall struct {
 
 // Args returns an interface slice containing the arguments of this
 // invocation.
-func (c StoragerPutFuncCall) Args() []interface{} {
+func (c StorerPutFuncCall) Args() []interface{} {
 	return []interface{}{c.Arg0, c.Arg1}
 }
 
 // Results returns an interface slice containing the results of this
 // invocation.
-func (c StoragerPutFuncCall) Results() []interface{} {
+func (c StorerPutFuncCall) Results() []interface{} {
 	return []interface{}{c.Result0}
 }
